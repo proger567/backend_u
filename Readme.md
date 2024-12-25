@@ -20,3 +20,4 @@
 | LISTEN_PORT | :80           | it is listen port                                |
 | SECRET_KEY  | *empty*       | it is secret key for check JWT token             |
 | DB_HOST     | *empty*       | this is a URL where database is hosted           |
+| DB_NAME     | *empty*       | gggg                                             |
