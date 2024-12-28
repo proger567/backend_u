@@ -4,7 +4,7 @@
 
 `GET` **/user** `Get user by name from JWT token`
 
-`GET` **/users** `Get all users<->role`
+`GET` **/usersrole** `Get all users<->role`
 
 `POST` **/user** `Add user to local database`
 
