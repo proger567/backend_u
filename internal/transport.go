@@ -49,6 +49,13 @@ func MakeHTTPHandler(s Service, logger UnitLogHandler) http.Handler {
 		httptransport.ServerErrorEncoder(encodeError),
 	}
 
+	r.Methods("OPTIONS", "GET").Path("/roles").Handler(accessControl(httptransport.NewServer(
+		e.getRolesEndpoint,
+		decodeRolesRequest,
+		encodeResponse,
+		options...,
+	)))
+
 	r.Methods("OPTIONS", "GET").Path("/user").Handler(accessControl(httptransport.NewServer(
 		e.GetUserEndpoint,
 		decodeUserRequest,
@@ -77,7 +84,7 @@ func MakeHTTPHandler(s Service, logger UnitLogHandler) http.Handler {
 		options...,
 	)))
 
-	r.Methods("DELETE").Path("/user/{user}").Handler(accessControl(httptransport.NewServer(
+	r.Methods("OPTIONS", "DELETE").Path("/user/{user}").Handler(accessControl(httptransport.NewServer(
 		e.DeleteUserEndpoint,
 		decodeDeleteRequest,
 		encodeResponse,
@@ -90,6 +97,17 @@ func MakeHTTPHandler(s Service, logger UnitLogHandler) http.Handler {
 }
 
 // ----------------------------------------------------------------------------------------------------------------------
+func decodeRolesRequest(_ context.Context, r *http.Request) (request interface{}, err error) {
+	_, role, errToken := getPermissionParams(r, err)
+	if errToken != nil {
+		return nil, errToken
+	}
+	if strings.ToLower(role) != "administrator" {
+		return nil, ErrForbidden
+	}
+	return getRolesRequest{}, nil
+}
+
 func decodeUserRequest(_ context.Context, r *http.Request) (request interface{}, err error) {
 	user, role, errToken := getPermissionParams(r, err)
 	if errToken != nil {

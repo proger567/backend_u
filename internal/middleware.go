@@ -25,6 +25,16 @@ func LoggingMiddleware(logger *logrus.Logger) Middleware {
 	}
 }
 
+func (mw loggingMiddleware) GetRoles(ctx context.Context) (roles []app.Role, err error) {
+	defer func(begin time.Time) {
+		mw.logger.WithFields(logrus.Fields{
+			"took":  time.Since(begin).Milliseconds(),
+			"error": err,
+		}).Info("method == GetRoles")
+	}(time.Now())
+	return mw.next.GetRoles(ctx)
+}
+
 func (mw loggingMiddleware) GetUser(ctx context.Context, userName, userRole string) (user app.User, err error) {
 	defer func(begin time.Time) {
 		mw.logger.WithFields(logrus.Fields{
@@ -90,6 +100,16 @@ func InstrumentingMiddleware(requestCount metrics.Counter, requestLatency metric
 			next:           next,
 		}
 	}
+}
+
+func (im instrumentingMiddleware) GetRoles(ctx context.Context) (roles []app.Role, err error) {
+	defer func(begin time.Time) {
+		lvs := []string{"method", "getRoles", "error", fmt.Sprint(err != nil)}
+		im.requestCount.With(lvs...).Add(1)
+		im.requestLatency.With(lvs...).Observe(time.Since(begin).Seconds())
+	}(time.Now())
+	roles, err = im.next.GetRoles(ctx)
+	return
 }
 
 func (im instrumentingMiddleware) GetUser(ctx context.Context, userName, userRole string) (user app.User, err error) {

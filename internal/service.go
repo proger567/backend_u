@@ -7,12 +7,12 @@ import (
 	"github.com/go-kit/kit/metrics"
 	"github.com/jackc/pgx/v5"
 	"github.com/sirupsen/logrus"
-	"strings"
 	"testgenerate_backend_user/internal/app"
 	"time"
 )
 
 type Service interface {
+	GetRoles(ctx context.Context) ([]app.Role, error)
 	GetUser(ctx context.Context, userName, userRole string) (app.User, error)
 	GetUsersRole(ctx context.Context) ([]app.User, error)
 	AddUser(ctx context.Context, userAdd app.User) error
@@ -41,6 +41,44 @@ func NewService(logger *logrus.Logger, requestCount metrics.Counter, requestLate
 }
 
 // ----------------------------------------------------------------------------------------------------------------------
+func (u userService) GetRoles(ctx context.Context) ([]app.Role, error) {
+	var roles []app.Role
+	psqlInfo := fmt.Sprintf("host=%s port=%d user=%s"+
+		" password=%s dbname=%s sslmode=disable",
+		app.GetEnv("DB_HOST", "localhost"), app.GetEnvAsInt("DB_PORT", 5432),
+		app.GetEnv("DB_USER", "postgres"), app.GetEnv("DB_PASSWORD", "pgpassword"),
+		app.GetEnv("DB_NAME", "generate"))
+	conn, err := pgx.Connect(ctx, psqlInfo)
+	if err != nil {
+		erRet := fmt.Errorf("GetRoles. Unable to connect to database: %v\n", err)
+		return roles, erRet
+	}
+	defer conn.Close(ctx)
+
+	rows, errRows := conn.Query(ctx, `select to_json(t.*)
+					from (select id, role_name from user_role) t`)
+	if errRows != nil {
+		erResp := fmt.Errorf("GetRoles QueryRow: %v\n", errRows)
+		return roles, erResp
+	}
+
+	for rows.Next() {
+		var res string
+		errScan := rows.Scan(&res)
+		if errScan != nil {
+			erRet := fmt.Errorf("GetRoles rows.Scan: %v\n", errScan)
+			return roles, erRet
+		}
+		var result app.Role
+		errU := json.Unmarshal([]byte(res), &result)
+		if errU != nil {
+			erRet := fmt.Errorf("GetRoles json.Unmarshal: %v\n", errU)
+			return roles, erRet
+		}
+		roles = append(roles, result)
+	}
+	return roles, nil
+}
 func (u userService) GetUser(ctx context.Context, user, role string) (app.User, error) {
 	var userRole app.User
 	psqlInfo := fmt.Sprintf("host=%s port=%d user=%s"+
@@ -81,7 +119,7 @@ func (u userService) GetUsersRole(ctx context.Context) ([]app.User, error) {
 	defer conn.Close(ctx)
 
 	rows, errRows := conn.Query(ctx, `select to_json(t.*)
-					from (select users.user_name, ur.role_name, users.create_time::date
+					from (select users.user_name, ur.role_name,ur.id as role_id, users.create_time::date
 							from users left join user_role ur on ur.id = users.role) t`)
 	if errRows != nil {
 		erResp := fmt.Errorf("GetUsersRole QueryRow: %v\n", errRows)
@@ -157,8 +195,8 @@ func (u userService) UpdateUser(ctx context.Context, user app.User) error {
 	}
 	defer conn.Close(ctx)
 
-	_, errU = conn.Exec(ctx, `update users set role = (select id from user_role where role_name = $2), create_time = $3 where user_name = $1`,
-		user.Name, strings.ToLower(user.Role), time.Now())
+	_, errU = conn.Exec(ctx, `update users set role = $2, create_time = $3 where user_name = $1`,
+		user.Name, user.RoleID, time.Now())
 	if errU != nil {
 		return fmt.Errorf("UpdateUser conn.Exec: %v\n", errU)
 	}
